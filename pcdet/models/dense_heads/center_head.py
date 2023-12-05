@@ -6,7 +6,29 @@ from torch.nn.init import kaiming_normal_
 from ..model_utils import model_nms_utils
 from ..model_utils import centernet_utils
 from ...utils import loss_utils
+from .attention import Cross_Attention_Decouple
+from .cbam import CBAM, DSI
 
+from ..fusion_module.nat import NATBlock
+
+
+class ConvTokenizer(nn.Module):
+    def __init__(self, in_chans=3, embed_dim=96, norm_layer=None):
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.Conv2d(in_chans, embed_dim, kernel_size=(1, 1), stride=(1, 1))
+            # nn.Conv2d(embed_dim // 2, embed_dim, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+        )
+        if norm_layer is not None:
+            self.norm = norm_layer(embed_dim)
+        else:
+            self.norm = None
+
+    def forward(self, x):
+        x = self.proj(x).permute(0, 2, 3, 1)
+        if self.norm is not None:
+            x = self.norm(x)
+        return x
 
 class SeparateHead(nn.Module):
     def __init__(self, input_channels, sep_head_dict, init_bias=-2.19, use_bias=False):
@@ -95,6 +117,31 @@ class CenterHead(nn.Module):
         self.predict_boxes_when_training = predict_boxes_when_training
         self.forward_ret_dict = {}
         self.build_losses()
+
+        # ### attention for fusion features
+        # self.attention = Cross_Attention_Decouple(
+        #          embed_dim=input_channels, # here is 384
+        #          num_heads=1,
+        #          bev_size=(128, 128), # feature map size is (128, 128)
+        #          bev_block_res=(64, 64), # follow VISTA config 
+        #          rv_size=(128, 128),
+        #          rv_block_res=(64, 64), 
+        #          hidden_channels=1024)
+
+        ### convolution for fusion features
+        self.conv_fuse = nn.Sequential(
+            nn.Conv2d(input_channels * 2, input_channels, 3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(input_channels, eps=1e-3, momentum=0.01),
+            nn.ReLU()
+        )
+        ### attention for fusion features
+        self.dsi = DSI(input_channels, input_channels)
+        # self.cbam = CBAM(input_channels * 2, reduction_ratio=2)
+
+        # ### attention for fusion features
+        # self.single_tokenizer = ConvTokenizer(in_chans=input_channels, embed_dim=input_channels//2, norm_layer=nn.LayerNorm)
+        # self.multi_tokenizer = ConvTokenizer(in_chans=input_channels, embed_dim=input_channels//2, norm_layer=nn.LayerNorm)
+        # self.fusion_nat = NATBlock(dim=input_channels//2, depth=3, depth_cross=3, num_heads=8, kernel_size=7, downsample=False)
 
     def build_losses(self):
         self.add_module('hm_loss_func', loss_utils.FocalLossCenterNet())
@@ -323,6 +370,27 @@ class CenterHead(nn.Module):
 
     def forward(self, data_dict):
         spatial_features_2d = data_dict['spatial_features_2d']
+        spatial_features_2d_single = data_dict['spatial_features_2d_single']
+
+        # # ### fuse features of two branches
+        # # spatial_features_fusion = torch.cat([spatial_features_2d, spatial_features_2d_single], dim=1)
+        # # spatial_features_2d = self.conv_fuse(spatial_features_fusion)
+
+        # # # ### fuse features via attention module
+        # # spatial_features_2d, atten_maps = self.attention((spatial_features_2d, spatial_features_2d_single))
+        # # spatial_features_2d = spatial_features_2d[0]
+
+        # ###  get attention via cbam/dsi of fused features
+        # # print(spatial_features_2d.shape, spatial_features_2d_single.shape)
+        spatial_features_fusion = self.dsi(spatial_features_2d, spatial_features_2d_single)
+        # # spatial_features_fusion = torch.cat([spatial_features_2d, spatial_features_2d_single], dim=1)
+        # # spatial_features_fusion = self.cbam(spatial_features_fusion)
+        spatial_features_2d = self.conv_fuse(spatial_features_fusion)
+
+        # ### fuse features via nat module
+        # spatial_features_2d = self.fusion_nat(self.multi_tokenizer(spatial_features_2d), self.single_tokenizer(spatial_features_2d_single))
+        # spatial_features_2d = spatial_features_2d.permute(0, 3, 1, 2)
+
         x = self.shared_conv(spatial_features_2d)
 
         pred_dicts = []

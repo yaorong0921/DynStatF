@@ -23,12 +23,24 @@ class PointPillar(Detector3DTemplate):
 
     def get_training_loss(self):
         disp_dict = {}
-
         loss_rpn, tb_dict = self.dense_head.get_loss()
-        tb_dict = {
-            'loss_rpn': loss_rpn.item(),
-            **tb_dict
-        }
 
-        loss = loss_rpn
+        # auxiliary loss for multi-frame branch
+        if 'dense_head_auxiliary' in self.module_topology:
+            loss_rpn_auxiliary, _ = self.dense_head_auxiliary.get_loss()
+
+            tb_dict = {
+                'loss_rpn': loss_rpn.item(),
+                'loss_rpn_auxiliary': loss_rpn_auxiliary.item(),
+                **tb_dict
+            }
+
+            loss = loss_rpn + 0.5 * loss_rpn_auxiliary
+        else:
+            tb_dict = {
+                'loss_rpn': loss_rpn.item(),
+                **tb_dict
+            }
+
+            loss = loss_rpn            
         return loss, tb_dict, disp_dict

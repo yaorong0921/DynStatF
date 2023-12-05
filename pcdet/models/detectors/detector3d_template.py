@@ -21,9 +21,9 @@ class Detector3DTemplate(nn.Module):
         self.register_buffer('global_step', torch.LongTensor(1).zero_())
 
         self.module_topology = [
-            'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
-            'backbone_2d', 'dense_head',  'point_head', 'roi_head'
-        ]
+            'vfe', 'vfe_extra', 'backbone_3d', 'backbone_3d_extra', 'map_to_bev_module', 'map_to_bev_module_extra',  'pfe',
+            'backbone_2d', 'backbone_2d_extra', 'dense_head', 'point_head', 'roi_head'
+        ] #'dense_head_auxiliary',
 
     @property
     def mode(self):
@@ -40,7 +40,9 @@ class Detector3DTemplate(nn.Module):
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
             'voxel_size': self.dataset.voxel_size,
-            'depth_downsample_factor': self.dataset.depth_downsample_factor
+            'depth_downsample_factor': self.dataset.depth_downsample_factor,
+            'grid_size_cur': self.dataset.grid_size_cur,
+            'voxel_size_cur': self.dataset.voxel_size_cur
         }
         for module_name in self.module_topology:
             module, model_info_dict = getattr(self, 'build_%s' % module_name)(
@@ -65,6 +67,22 @@ class Detector3DTemplate(nn.Module):
         model_info_dict['module_list'].append(vfe_module)
         return vfe_module, model_info_dict
 
+    def build_vfe_extra(self, model_info_dict):
+        if self.model_cfg.get('VFE_EXTRA', None) is None:
+            return None, model_info_dict
+
+        vfe_extra_module = vfe.__all__[self.model_cfg.VFE_EXTRA.NAME](
+            model_cfg=self.model_cfg.VFE_EXTRA,
+            num_point_features=model_info_dict['num_rawpoint_features'] - 1,
+            point_cloud_range=model_info_dict['point_cloud_range'],
+            voxel_size=model_info_dict['voxel_size_cur'],
+            grid_size=model_info_dict['grid_size_cur'],
+            depth_downsample_factor=model_info_dict['depth_downsample_factor']
+        )
+        model_info_dict['num_point_features_extra'] = vfe_extra_module.get_output_feature_dim()
+        model_info_dict['module_list'].append(vfe_extra_module)
+        return vfe_extra_module, model_info_dict
+
     def build_backbone_3d(self, model_info_dict):
         if self.model_cfg.get('BACKBONE_3D', None) is None:
             return None, model_info_dict
@@ -82,6 +100,23 @@ class Detector3DTemplate(nn.Module):
             if hasattr(backbone_3d_module, 'backbone_channels') else None
         return backbone_3d_module, model_info_dict
 
+    def build_backbone_3d_extra(self, model_info_dict):
+        if self.model_cfg.get('BACKBONE_3D_EXTRA', None) is None:
+            return None, model_info_dict
+
+        backbone_3d_extra_module = backbones_3d.__all__[self.model_cfg.BACKBONE_3D_EXTRA.NAME](
+            model_cfg=self.model_cfg.BACKBONE_3D_EXTRA,
+            input_channels=4, #model_info_dict['num_point_features'],
+            grid_size=model_info_dict['grid_size_cur'],
+            voxel_size=model_info_dict['voxel_size_cur'],
+            point_cloud_range=model_info_dict['point_cloud_range']
+        )
+        model_info_dict['module_list'].append(backbone_3d_extra_module)
+        model_info_dict['num_point_features'] = backbone_3d_extra_module.num_point_features
+        model_info_dict['backbone_channels'] = backbone_3d_extra_module.backbone_channels \
+            if hasattr(backbone_3d_extra_module, 'backbone_channels') else None
+        return backbone_3d_extra_module, model_info_dict
+
     def build_map_to_bev_module(self, model_info_dict):
         if self.model_cfg.get('MAP_TO_BEV', None) is None:
             return None, model_info_dict
@@ -94,6 +129,18 @@ class Detector3DTemplate(nn.Module):
         model_info_dict['num_bev_features'] = map_to_bev_module.num_bev_features
         return map_to_bev_module, model_info_dict
 
+    def build_map_to_bev_module_extra(self, model_info_dict):
+        if self.model_cfg.get('MAP_TO_BEV_EXTRA', None) is None:
+            return None, model_info_dict
+
+        map_to_bev_module_extra = map_to_bev.__all__[self.model_cfg.MAP_TO_BEV_EXTRA.NAME](
+            model_cfg=self.model_cfg.MAP_TO_BEV_EXTRA,
+            grid_size=model_info_dict['grid_size_cur']
+        )
+        model_info_dict['module_list'].append(map_to_bev_module_extra)
+        model_info_dict['num_bev_features_extra'] = map_to_bev_module_extra.num_bev_features
+        return map_to_bev_module_extra, model_info_dict
+
     def build_backbone_2d(self, model_info_dict):
         if self.model_cfg.get('BACKBONE_2D', None) is None:
             return None, model_info_dict
@@ -105,6 +152,18 @@ class Detector3DTemplate(nn.Module):
         model_info_dict['module_list'].append(backbone_2d_module)
         model_info_dict['num_bev_features'] = backbone_2d_module.num_bev_features
         return backbone_2d_module, model_info_dict
+
+    def build_backbone_2d_extra(self, model_info_dict):
+        if self.model_cfg.get('BACKBONE_2D_EXTRA', None) is None:
+            return None, model_info_dict
+
+        backbone_2d_module_extra = backbones_2d.__all__[self.model_cfg.BACKBONE_2D_EXTRA.NAME](
+            model_cfg=self.model_cfg.BACKBONE_2D_EXTRA,
+            input_channels=model_info_dict['num_bev_features_extra']
+        )
+        model_info_dict['module_list'].append(backbone_2d_module_extra)
+        model_info_dict['num_bev_features_extra'] = backbone_2d_module_extra.num_bev_features
+        return backbone_2d_module_extra, model_info_dict
 
     def build_pfe(self, model_info_dict):
         if self.model_cfg.get('PFE', None) is None:
@@ -137,6 +196,22 @@ class Detector3DTemplate(nn.Module):
         )
         model_info_dict['module_list'].append(dense_head_module)
         return dense_head_module, model_info_dict
+
+    def build_dense_head_auxiliary(self, model_info_dict):
+        if self.model_cfg.get('DENSE_HEAD_AUXILIARY', None) is None:
+            return None, model_info_dict
+        dense_head_auxiliary_module = dense_heads.__all__[self.model_cfg.DENSE_HEAD_AUXILIARY.NAME](
+            model_cfg=self.model_cfg.DENSE_HEAD_AUXILIARY,
+            input_channels=model_info_dict['num_bev_features'],
+            num_class=self.num_class if not self.model_cfg.DENSE_HEAD_AUXILIARY.CLASS_AGNOSTIC else 1,
+            class_names=self.class_names,
+            grid_size=model_info_dict['grid_size_cur'],
+            point_cloud_range=model_info_dict['point_cloud_range'],
+            predict_boxes_when_training=self.model_cfg.get('ROI_HEAD', False),
+            voxel_size=model_info_dict.get('voxel_size_cur', False)
+        )
+        model_info_dict['module_list'].append(dense_head_auxiliary_module)
+        return dense_head_auxiliary_module, model_info_dict
 
     def build_point_head(self, model_info_dict):
         if self.model_cfg.get('POINT_HEAD', None) is None:

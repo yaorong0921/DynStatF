@@ -27,6 +27,15 @@ class BaseBEVBackbone(nn.Module):
         c_in_list = [input_channels, *num_filters[:-1]]
         self.blocks = nn.ModuleList()
         self.deblocks = nn.ModuleList()
+
+        # ### layers to arrange dim for summation single and mutliframe features
+        # self.reduce_layers = nn.ModuleList()
+        # ### This is to keep with the nat single frame network
+        # self.reduce_layers = nn.Sequential(
+        #     nn.Conv2d(input_channels, input_channels // 2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+        #     nn.Conv2d(input_channels // 2, input_channels, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+        #     nn.BatchNorm2d(input_channels),
+        #     nn.ReLU())
         for idx in range(num_levels):
             cur_layers = [
                 nn.ZeroPad2d(1),
@@ -68,6 +77,13 @@ class BaseBEVBackbone(nn.Module):
                         nn.ReLU()
                     ))
 
+            # ### layers to arrange dim for summation single and mutliframe features
+            # channel_reduce = [
+            #             nn.Conv2d(num_filters[idx]*2, num_filters[idx], 1, stride=1, bias=False),
+            #             nn.BatchNorm2d(num_filters[idx], eps=1e-3, momentum=0.01),
+            #             nn.ReLU()]
+            # self.reduce_layers.append(nn.Sequential(*channel_reduce))
+
         c_in = sum(num_upsample_filters)
         if len(upsample_strides) > num_levels:
             self.deblocks.append(nn.Sequential(
@@ -88,12 +104,24 @@ class BaseBEVBackbone(nn.Module):
         spatial_features = data_dict['spatial_features']
         ups = []
         ret_dict = {}
+
+        # x = spatial_features
+        # ### reduce the height and width
+        # spatial_features = self.reduce_layers(spatial_features)
         x = spatial_features
+
         for i in range(len(self.blocks)):
             x = self.blocks[i](x)
 
             stride = int(spatial_features.shape[2] / x.shape[2])
-            ret_dict['spatial_features_%dx' % stride] = x
+            # # rec_dict['spatial_features_%dx' % stride] = x
+            data_dict['spatial_features_%dx' % stride] = x
+
+            # fuse features from single-frame branch (lateral connection)
+            # TODO: try different strategies for fusion (concat + conv)
+            # Strategy1: add features directly
+            # x += self.reduce_layers[i](data_dict['cur_spatial_features_%dx' % stride])
+
             if len(self.deblocks) > 0:
                 ups.append(self.deblocks[i](x))
             else:

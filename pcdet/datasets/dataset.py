@@ -30,13 +30,16 @@ class DatasetTemplate(torch_data.Dataset):
         self.data_augmentor = DataAugmentor(
             self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, logger=self.logger
         ) if self.training else None
+        # self.data_augmentor = None
         self.data_processor = DataProcessor(
             self.dataset_cfg.DATA_PROCESSOR, point_cloud_range=self.point_cloud_range,
-            training=self.training, num_point_features=self.point_feature_encoder.num_point_features
+            training=self.training, num_point_features=self.point_feature_encoder.num_point_features,
         )
 
         self.grid_size = self.data_processor.grid_size
         self.voxel_size = self.data_processor.voxel_size
+        self.grid_size_cur = self.data_processor.grid_size_cur
+        self.voxel_size_cur = self.data_processor.voxel_size_cur
         self.total_epochs = 0
         self._merge_all_iters_to_one_epoch = False
 
@@ -168,9 +171,9 @@ class DatasetTemplate(torch_data.Dataset):
 
         for key, val in data_dict.items():
             try:
-                if key in ['voxels', 'voxel_num_points']:
+                if key in ['voxels', 'voxel_num_points', 'cur_voxels', 'cur_voxel_num_points']:
                     ret[key] = np.concatenate(val, axis=0)
-                elif key in ['points', 'voxel_coords']:
+                elif key in ['points', 'voxel_coords', 'cur_voxel_coords']:
                     coors = []
                     for i, coor in enumerate(val):
                         coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode='constant', constant_values=i)

@@ -63,9 +63,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             output_path=final_output_dir if save_to_file else None
         )
         det_annos += annos
-        if cfg.LOCAL_RANK == 0:
-            progress_bar.set_postfix(disp_dict)
-            progress_bar.update()
+        # if cfg.LOCAL_RANK == 0:
+        #     progress_bar.set_postfix(disp_dict)
+        #     progress_bar.update()
+        if i%1000 == 0:
+            print(i)
 
     if cfg.LOCAL_RANK == 0:
         progress_bar.close()
@@ -106,6 +108,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     with open(result_dir / 'result.pkl', 'wb') as f:
         pickle.dump(det_annos, f)
+    #det_annos = pickle.load(open(result_dir / 'result.pkl'))
 
     result_str, result_dict = dataset.evaluation(
         det_annos, class_names,

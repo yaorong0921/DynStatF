@@ -68,6 +68,7 @@ class DataProcessor(object):
         self.mode = 'train' if training else 'test'
         self.grid_size = self.voxel_size = None
         self.data_processor_queue = []
+        self.grid_size_cur = self.voxel_size_cur = None
 
         self.voxel_generator = None
 
@@ -141,6 +142,69 @@ class DataProcessor(object):
         data_dict['voxel_coords'] = coordinates
         data_dict['voxel_num_points'] = num_points
         return data_dict
+
+    def transform_points_to_voxels_two_stream(self, data_dict=None, config=None):
+        """
+            This function is modified from the original voxelization.
+            Update:
+                - Perform additional voxelization on the points within the current frame.
+        """
+        if data_dict is None:
+            grid_size = (self.point_cloud_range[3:6] - self.point_cloud_range[0:3]) / np.array(config.VOXEL_SIZE)
+            self.grid_size = np.round(grid_size).astype(np.int64)
+            self.voxel_size = config.VOXEL_SIZE
+            # just bind the config, we will create the VoxelGeneratorWrapper later,
+            # to avoid pickling issues in multiprocess spawn
+
+            grid_size_cur = (self.point_cloud_range[3:6] - self.point_cloud_range[0:3]) / np.array(config.VOXEL_SIZE_CUR)
+            self.grid_size_cur = np.round(grid_size_cur).astype(np.int64)
+            self.voxel_size_cur = config.VOXEL_SIZE_CUR
+            return partial(self.transform_points_to_voxels_two_stream, config=config)
+
+        if self.voxel_generator is None:
+            self.voxel_generator = VoxelGeneratorWrapper(
+                vsize_xyz=config.VOXEL_SIZE,
+                coors_range_xyz=self.point_cloud_range,
+                num_point_features=self.num_point_features,
+                max_num_points_per_voxel=config.MAX_POINTS_PER_VOXEL,
+                max_num_voxels=config.MAX_NUMBER_OF_VOXELS[self.mode],
+            )
+
+            self.cur_voxel_generator = VoxelGeneratorWrapper(
+                vsize_xyz=config.VOXEL_SIZE_CUR,
+                coors_range_xyz=self.point_cloud_range,
+                num_point_features=self.num_point_features - 1,
+                max_num_points_per_voxel=config.MAX_POINTS_PER_VOXEL_CUR,
+                max_num_voxels=config.MAX_NUMBER_OF_VOXELS_CUR[self.mode],
+            )
+
+        points = data_dict['points']
+        voxel_output = self.voxel_generator.generate(points)
+        voxels, coordinates, num_points = voxel_output
+
+        if not data_dict['use_lead_xyz']:
+            voxels = voxels[..., 3:]  # remove xyz in voxels(N, 3)
+
+        data_dict['voxels'] = voxels
+        data_dict['voxel_coords'] = coordinates
+        data_dict['voxel_num_points'] = num_points
+
+        # extract points within current frame
+        cur_mask = points[:, -1] == 0
+        # only keep the first four dim
+        cur_points = points[cur_mask][:,:-1]
+        cur_voxel_output = self.cur_voxel_generator.generate(np.ascontiguousarray(cur_points))
+        cur_voxels, cur_coordinates, cur_num_points = cur_voxel_output
+
+        if not data_dict['use_lead_xyz']:
+            cur_voxels = cur_voxels[..., 3:]  # remove xyz in voxels(N, 3)
+
+        data_dict['cur_voxels'] = cur_voxels
+        data_dict['cur_voxel_coords'] = cur_coordinates
+        data_dict['cur_voxel_num_points'] = cur_num_points
+
+        return data_dict
+
 
     def sample_points(self, data_dict=None, config=None):
         if data_dict is None:

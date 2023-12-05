@@ -41,7 +41,6 @@ DATA_CONFIG:
               NOISE_TRANSLATE_STD: 0.5
               ALONG_AXIS_LIST: ['x', 'y', 'z']
 
-
     DATA_PROCESSOR:
         - NAME: mask_points_and_boxes_outside_range
           REMOVE_OUTSIDE_BOXES: True
@@ -81,7 +80,7 @@ MODEL:
         LAYER_STRIDES: [1, 2]
         NUM_FILTERS: [128, 256]
         UPSAMPLE_STRIDES: [1, 2]
-        NUM_UPSAMPLE_FILTERS: [256, 256]
+        NUM_UPSAMPLE_FILTERS: [256, 256]  ## change from 256 to 128 to use the cag.
 
     DENSE_HEAD:
         NAME: CenterHead
@@ -140,7 +139,7 @@ MODEL:
 
 
 OPTIMIZATION:
-    BATCH_SIZE_PER_GPU: 4
+    BATCH_SIZE_PER_GPU: 8
     NUM_EPOCHS: 20
 
     OPTIMIZER: adam_onecycle

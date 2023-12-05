@@ -260,7 +260,10 @@ class NuScenesDataset(DatasetTemplate):
         database_save_path.mkdir(parents=True, exist_ok=True)
         all_db_infos = {}
 
-        for idx in tqdm(range(len(self.infos))):
+        #for idx in tqdm(range(len(self.infos))):
+        for idx in (range(len(self.infos))):
+            if idx % 1000 == 0:
+                print(idx)
             sample_idx = idx
             info = self.infos[idx]
             points = self.get_lidar_with_sweeps(idx, max_sweeps=max_sweeps)

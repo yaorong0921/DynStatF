@@ -67,6 +67,7 @@ def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id
 
 def get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args):
     ckpt_list = glob.glob(os.path.join(ckpt_dir, '*checkpoint_epoch_*.pth'))
+    # print(os.path.join(ckpt_dir, '*checkpoint_epoch_*.pth'))
     ckpt_list.sort(key=os.path.getmtime)
     evaluated_ckpt_list = [float(x.strip()) for x in open(ckpt_record_file, 'r').readlines()]
 
@@ -98,6 +99,7 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
     while True:
         # check whether there is checkpoint which is not evaluated
         cur_epoch_id, cur_ckpt = get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args)
+        # print(cur_epoch_id, cur_ckpt)
         if cur_epoch_id == -1 or int(float(cur_epoch_id)) < args.start_epoch:
             wait_second = 30
             if cfg.LOCAL_RANK == 0:

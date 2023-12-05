@@ -6,6 +6,7 @@ import tqdm
 import time
 from torch.nn.utils import clip_grad_norm_
 from pcdet.utils import common_utils, commu_utils
+from datetime import datetime
 
 
 def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, accumulated_iter, optim_cfg,
@@ -71,10 +72,15 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
                 'f_time': f'{forward_time.val:.2f}({forward_time.avg:.2f})', 'b_time': f'{batch_time.val:.2f}({batch_time.avg:.2f})'
             })
 
-            pbar.update()
-            pbar.set_postfix(dict(total_it=accumulated_iter))
-            tbar.set_postfix(disp_dict)
-            tbar.refresh()
+            # pbar.update()
+            # pbar.set_postfix(dict(total_it=accumulated_iter))
+            # tbar.set_postfix(disp_dict)
+            # tbar.refresh()
+            if cur_it % 1000 == 0:
+                print(cur_it)
+                now = datetime.now()
+                current_time = now.strftime("%H:%M:%S")
+                print("Current Time =", current_time)
 
             if tb_log is not None:
                 tb_log.add_scalar('train/loss', loss, accumulated_iter)
@@ -102,6 +108,10 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
         for cur_epoch in tbar:
             if train_sampler is not None:
                 train_sampler.set_epoch(cur_epoch)
+            print('Epoch: %d'%(cur_epoch+1))
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            print("Current Time =", current_time)
 
             # train one epoch
             if lr_warmup_scheduler is not None and cur_epoch < optim_cfg.WARMUP_EPOCH:
