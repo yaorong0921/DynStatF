@@ -16,6 +16,7 @@ All experiments were conducted using eight V100 GPUs.
 #### Prerequisites
 - Dataset: Please follow the instructions on [nuScenes](https://www.nuscenes.org/nuscenes) to download the dataset (Full dataset (v1.0)). After downloading, change the data path in `tools/cfgs/dataset_configs/nuscenes_data.yaml`.
 - OpenPCDet Toolkit: Please follow the instructions on [OpenPCDet](https://github.com/open-mmlab/OpenPCDet) to install the OpenPCDet toolbox. 
+- NATTEN module: Please build this module following the instructions at [NATTEN](https://github.com/SHI-Labs/NATTEN). 
 
 ### Run Scripts
 To train DynStaF with the PointPillar backbone, please run ```bash ./scripts/dist_train.sh 8 --cfg_file ./cfgs/nuscenes_models/cbgs_pp_multihead_dynstaf.yaml```
